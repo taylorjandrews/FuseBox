@@ -7,6 +7,11 @@ APP_SECRET = 'qnxma4e9qkjdu9o'
 ACCESS_TYPE = 'app_folder'
 
 sess = session.DropboxSession(APP_KEY, APP_SECRET, ACCESS_TYPE)
+sess.set_token("jh4s0a67jeg1sssz", "zd7w4pensthme4u")
+
+client = client.DropboxClient(sess)
+
+'''
 
 request_token = sess.obtain_request_token()
 url = sess.build_authorize_url(request_token)
@@ -19,5 +24,4 @@ raw_input()
 # This will fail if the user didn't visit the above URL
 access_token = sess.obtain_access_token(request_token)
 
-client = client.DropboxClient(sess)
-print 'linked account: ', client.account_info()
+'''
