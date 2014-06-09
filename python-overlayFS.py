@@ -65,4 +65,3 @@ class ENCFS(Fuse):
 
     def fsinit(self):
         os.chdir(self.root)
-
