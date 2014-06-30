@@ -17,9 +17,7 @@ code = raw_input("Enter the authorization code here: ").strip()
 access_token, user_id = flow.finish(code)
 
 client = dropbox.client.DropboxClient(access_token)
-print 'linked account: ', client.account_info()
 
-
-folder_metadata = client.metadata('/')
-for e in folder_metadata.contents:
-    print e.fileName
+folder_metadata = client.metadata('/CSCI1300')
+for entry in folder_metadata['contents']:
+    print(entry['path'])
