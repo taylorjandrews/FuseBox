@@ -7,8 +7,8 @@ ACCESS_TOKEN = appinfo.readline().strip()
 
 client = dropbox.client.DropboxClient(ACCESS_TOKEN)
 
-folder_metadata = client.metadata('/Custos/TestFolder')
-
+folder_metadata = client.metadata('/Custos')
+print(folder_metadata)
 for entry in folder_metadata['contents']:
     entry['path'] = entry['path'].split('/')
     filename = entry['path'][len(entry['path'])-1]

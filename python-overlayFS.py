@@ -22,23 +22,54 @@ class DropboxInfo():
         self.directories = {}
 
     def makefiles(self):
-        self.folderdata = self.client.metadata('/Custos/TestFolder')
-        for self.f in folderdata['contents']:
+        self.folderdata = self.client.metadata('/Custos')
+        for self.f in self.folderdata['contents']:
             self.f['path'] = self.f['path'].split('/')
             filename = self.f['path'][len(self.f['path'])-1]
-            self.files[filename] = {'name': filename}
+            is_dir = self.f['is_dir']
+            size = self.f['size']
+            modified = self.f['modified']
+            self.files[filename] = {'name': filename, 'size': size, 'is_dir': is_dir,
+                                     'modified': modified}
 
 class ENCFS(Fuse):
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
         self.drop = DropboxInfo()
-        print(self.drop.files)
+        self.drop.makefiles()
 
     def getattr(self, path):
-        return 0
+        for f in self.drop.files:
+            if not self.drop.files[f]['is_dir']:
+                return dict(
+                    st_mode = S_IFREG | 0444,
+                    st_size = self.drop.files[f]['size'],
+                    st_atime = self.drop.files[f]['modified'],
+                    st_mtime = self.drop.files[f]['modified'],
+                    st_ctime = self.drop.files[f]['modified'],
+                    st_nlink = 1
+                    )
+        if path == '/':
+            return dict(
+                st_mode = S_IFREG | 0755,
+                st_size = 0,
+                st_nlink = 3)
+        else:
+            return dict(
+                    st_mode = S_IFREG | 0444,
+                    st_size = self.drop.files[f]['size'],
+                    st_atime = self.drop.files[f]['modified'],
+                    st_mtime = self.drop.files[f]['modified'],
+                    st_ctime = self.drop.files[f]['modified'],
+                    st_nlink = 1
+                    )
 
-    def readdir(self, path, offset, filler):
-        return 0
+    def readdir(self, path, offset):
+        names  = ['.', '..']
+        if path == '/':
+            for f in self.drop.files:
+                names.append(self.drop.files[f]['name'])
+        return names
 
 def main():
     usage = Fuse.fusage
