@@ -1,67 +1,52 @@
 #!/usr/bin/env python
 
 import os, sys
+import dropbox
 from errno import *
 from stat import *
 import fcntl
-
 import fuse
+from fuse import Fuse
 
 fuse.fuse_python_api = (0, 2)
 
+appinfo = open("python-examples/appkey.txt",'r')
+APP_KEY = appinfo.readline().strip()
+APP_SECRET = appinfo.readline().strip()
+ACCESS_TOKEN = appinfo.readline().strip()
+
+class DropboxInfo():
+    def __init__(self):
+        self.client = dropbox.client.DropboxClient(ACCESS_TOKEN)
+        self.files = {}
+        self.directories = {}
+
+    def makefiles(self):
+        self.folderdata = self.client.metadata('/Custos/TestFolder')
+        for self.f in folderdata['contents']:
+            self.f['path'] = self.f['path'].split('/')
+            filename = self.f['path'][len(self.f['path'])-1]
+            self.files[filename] = {'name': filename}
+
 class ENCFS(Fuse):
+    def __init__(self, *args, **kw):
+        Fuse.__init__(self, *args, **kw)
+        self.drop = DropboxInfo()
+        print(self.drop.files)
 
     def getattr(self, path):
-        return os.lstat("." + path)
+        return 0
 
-    def readlink(self, path):
-        return os.readlink("." + path)
+    def readdir(self, path, offset, filler):
+        return 0
 
-    def readdir(self, path, offset):
-        for e in os.listdir("." + path):
-            yield fuse.Direntry(e)
+def main():
+    usage = Fuse.fusage
 
-    def unlink(self, path):
-        os.unlink("." + path)
+    encfs = ENCFS(version="%prog " + fuse.__version__, usage = usage)
+    encfs.parser.add_option(mountopt="root", metavar="PATH", default='/', help="asdf")
+    encfs.parse(values=encfs, errex=1)
+    encfs.main()
 
-    def rmdir(self, path):
-        os.rmdir("." + path)
-
-    def symlink(self, path, path1):
-        os.symlink(path, "." + path1)
-
-    def rename(self, path, path1):
-        os.rename("." + path, "." + path1)
-
-    def link(self, path, path1):
-        os.link("." + path, "." + path1)
-
-    def chmod(self, path, mode):
-        os.chmod("." + path, mode)
-
-    def chown(self, path, user, group):
-        os.chown("." + path, user, group)
-
-    def truncate(self, path, len):
-        f = open("." + path, "a")
-        f.truncate(len)
-        f.close()
-
-    def mknod(self, path, mode, dev):
-        os.mknod("." + path, mode, dev)
-
-    def mkdir(self, path, mode):
-        os.mkdir("." + path, mode)
-
-    def utime(self, path, times):
-        os.utime("." + path, times)
-
-    def access(self, path, mode):
-        if not os.access("." + path, mode):
-            return -EACCES
-
-    def statfs(self):
-        return os.statvfs(".")
-
-    def fsinit(self):
-        os.chdir(self.root)
+if __name__ == '__main__':
+    main()
