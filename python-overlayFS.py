@@ -56,7 +56,7 @@ class ENCFS(Fuse):
                 st_nlink = 3)
         else:
             return dict(
-                    st_mode = S_IFREG | 0444,
+                    st_mode = S_IFREG | 0666,
                     st_size = self.drop.files[f]['size'],
                     st_atime = self.drop.files[f]['modified'],
                     st_mtime = self.drop.files[f]['modified'],
