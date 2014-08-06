@@ -7,6 +7,7 @@ from stat import *
 import fcntl
 import fuse
 from fuse import Fuse
+from time import time
 
 fuse.fuse_python_api = (0, 2)
 
@@ -15,68 +16,91 @@ APP_KEY = appinfo.readline().strip()
 APP_SECRET = appinfo.readline().strip()
 ACCESS_TOKEN = appinfo.readline().strip()
 
-class DropboxInfo():
+class DropboxInit():
     def __init__(self):
         self.client = dropbox.client.DropboxClient(ACCESS_TOKEN)
         self.files = {}
         self.directories = {}
 
-    def makefiles(self):
-        self.folderdata = self.client.metadata('/Custos')
-        for self.f in self.folderdata['contents']:
-            self.f['path'] = self.f['path'].split('/')
-            filename = self.f['path'][len(self.f['path'])-1]
-            is_dir = self.f['is_dir']
-            size = self.f['size']
-            modified = self.f['modified']
-            self.files[filename] = {'name': filename, 'size': size, 'is_dir': is_dir,
-                                     'modified': modified}
+    def getfiles(self):
+        folder_metadata = self.client.metadata('/')
+        for f in folder_metadata['contents']:
+            path = self.getpath(f)
+            self.files[path] = f
+        
+        for f in list(self.files):
+            split = f.split('/')
+            name = split[len(split)-1]
+            split.remove(name)
+            dirinfo = '/' + ''.join(split)
+            
+            if not dirinfo in self.files:
+                self.files[dirinfo] = {'children': [], 'name': '/'}
+
+            self.files[dirinfo]['children'].append(name)
+            self.files[f]['name'] = name
+
+            if not self.files[f]['is_dir']:
+                self.files[self.getpath(f)]['children'] = []
+
+    def getpath(self, f):
+        return f['path']
+
+    def getnlink(self, f):
+        count = 0
+        for child in f['children']:
+            count += 1
+
+        return count
 
 class ENCFS(Fuse):
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
-        self.drop = DropboxInfo()
-        self.drop.makefiles()
+        self.drop = DropboxInit()
+        self.drop.getfiles()
 
     def getattr(self, path):
-        for f in self.drop.files:
-            if not self.drop.files[f]['is_dir']:
-                return dict(
-                    st_mode = S_IFREG | 0444,
-                    st_size = self.drop.files[f]['size'],
-                    st_atime = self.drop.files[f]['modified'],
-                    st_mtime = self.drop.files[f]['modified'],
-                    st_ctime = self.drop.files[f]['modified'],
-                    st_nlink = 1
-                    )
-        if path == '/':
-            return dict(
-                st_mode = S_IFREG | 0755,
-                st_size = 0,
-                st_nlink = 3)
+        t = time()
+        st = fuse.Stat()
+        if path in self.drop.files:
+            f = self.drop.files[path]
+            st.st_mtime = t
+            st.st_atime = st.st_mtime
+            st.st_ctime = st.st_ctime
+            
+            if not f['children']:
+                st.st_mode = stat.S_IFREG | 0755
+                st.st_nlink = 1 + drop.getnlink(f)
+                st.st_size = f['size']
+            else:
+                st.st_mode = stat.S_IFREG | 0666
+                st.st_nlink = 1
+                st.st_size = f['size']
+
+            return st
         else:
-            return dict(
-                    st_mode = S_IFREG | 0666,
-                    st_size = self.drop.files[f]['size'],
-                    st_atime = self.drop.files[f]['modified'],
-                    st_mtime = self.drop.files[f]['modified'],
-                    st_ctime = self.drop.files[f]['modified'],
-                    st_nlink = 1
-                    )
+            st.st_mode = S_IFREG | 0444
+            st.st_size = 0
+            st.st_nlink = 1
+
+            return st
 
     def readdir(self, path, offset):
-        names  = ['.', '..']
-        if path == '/':
-            for f in self.drop.files:
-                names.append(self.drop.files[f]['name'])
-        return names
+        entries = ['.', '..']
+        for e in self.drop.files:
+            entries.append(self.drop.files[e]['name'])
+
+        return entries
+
+    def open(self, path, flags):
+        return 0
+
+    def read(self, path, length, offset):
+        return 0
 
 def main():
-    usage = Fuse.fusage
-
-    encfs = ENCFS(version="%prog " + fuse.__version__, usage = usage)
-    encfs.parser.add_option(mountopt="root", metavar="PATH", default='/', help="asdf")
-    encfs.parse(values=encfs, errex=1)
+    encfs = ENCFS()
+    encfs.parse(errex=1)
     encfs.main()
 
 if __name__ == '__main__':
