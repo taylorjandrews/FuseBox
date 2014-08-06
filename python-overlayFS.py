@@ -3,7 +3,7 @@
 import os, sys
 import dropbox
 from errno import *
-from stat import *
+import stat
 import fcntl
 import fuse
 from fuse import Fuse
@@ -35,10 +35,11 @@ class DropboxInit():
             dirinfo = '/' + ''.join(split)
             
             if not dirinfo in self.files:
-                self.files[dirinfo] = {'children': [], 'name': '/'}
+                self.files[dirinfo] = {'children': [], 'name': '/', 'size': 0}
 
             self.files[dirinfo]['children'].append(name)
             self.files[f]['name'] = name
+            self.files[f]['size'] = self.files[f]['size']
 
             if not self.files[f]['is_dir']:
                 self.files[self.getpath(f)]['children'] = []
@@ -58,19 +59,20 @@ class ENCFS(Fuse):
         Fuse.__init__(self, *args, **kw)
         self.drop = DropboxInit()
         self.drop.getfiles()
+        self.t = time()
 
     def getattr(self, path):
         t = time()
         st = fuse.Stat()
         if path in self.drop.files:
             f = self.drop.files[path]
-            st.st_mtime = t
+            st.st_mtime = self.t
             st.st_atime = st.st_mtime
-            st.st_ctime = st.st_ctime
+            st.st_ctime = st.st_mtime
             
-            if not f['children']:
-                st.st_mode = stat.S_IFREG | 0755
-                st.st_nlink = 1 + drop.getnlink(f)
+            if f['children']:
+                st.st_mode = stat.S_IFDIR | 0755
+                st.st_nlink = 1 + self.drop.getnlink(f)
                 st.st_size = f['size']
             else:
                 st.st_mode = stat.S_IFREG | 0666
@@ -79,7 +81,7 @@ class ENCFS(Fuse):
 
             return st
         else:
-            st.st_mode = S_IFREG | 0444
+            st.st_mode = stat.S_IFREG | 0444
             st.st_size = 0
             st.st_nlink = 1
 
@@ -88,6 +90,7 @@ class ENCFS(Fuse):
     def readdir(self, path, offset):
         entries = ['.', '..']
         for e in self.drop.files:
+            print(self.drop.files[e]['name'])
             entries.append(self.drop.files[e]['name'])
 
         return entries
