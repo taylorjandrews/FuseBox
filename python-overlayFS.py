@@ -66,6 +66,7 @@ class ENCFS(Fuse):
         st = fuse.Stat()
         if path in self.drop.files:
             f = self.drop.files[path]
+            print("f = {:s}".format(f))
             st.st_mtime = self.t
             st.st_atime = st.st_mtime
             st.st_ctime = st.st_mtime
@@ -88,11 +89,17 @@ class ENCFS(Fuse):
             return st
 
     def readdir(self, path, offset):
-        entries = ['.', '..']
-        for e in self.drop.files:
-            print(self.drop.files[e]['name'])
-            entries.append(self.drop.files[e]['name'])
 
+        entries = [fuse.Direntry('.'),
+                   fuse.Direntry('..') ]
+        for e in self.drop.files:
+            name = self.drop.files[e]['name'] 
+            print("name = '{:s}'".format(name))
+            print("type = {:s}".format(type(name)))
+            de = fuse.Direntry(str(name))
+            entries.append(de)
+
+        print(entries)
         return entries
 
     def open(self, path, flags):
