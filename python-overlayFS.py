@@ -3,7 +3,7 @@
 import os, sys
 import dropbox
 from errno import *
-import stat
+from stat import S_IFDIR, S_IFLNK, S_IFREG
 import fcntl
 import fuse
 from fuse import Fuse
@@ -22,37 +22,39 @@ class DropboxInit():
         self.files = {}
         self.directories = {}
 
-    def getfiles(self, fpath = '/csci1300/'):        
-        folder_metadata = self.client.metadata(fpath)
-
-        if folder_metadata['contents']:
+    def getfiles(self, path = '/'):   
+        folder_metadata = self.client.metadata(path)
+        if 'contents' in folder_metadata:
             for f in folder_metadata['contents']:
-                path = self.getpath(f)
+                path = f['path'].split('/', 1)
+                self.files[self.getpath(f)] = f
+                self.getfiles(path[-1])
+
+    def getfileinfo(self):
+        self.getfiles()
+        for f in list(self.files):
+            name = f.split('/')
+            name = name[len(name)-1]
+            self.files[f]['name'] = name
+            self.files[f]['dir'] = f.rsplit('/',1)[0]
+            if self.files[f]['dir'] == '':
+                self.files[f]['dir'] = '/'
+            print (self.files[f]['dir'])
+    
+    def getfileinheritance(self):
+        self.getfileinfo()
+        for f in list(self.files):
+            path = self.getpath(f)
+            if not self.files[f][['dir'] in self.files:
+                self.files[self.files[f]['dir']]['children'] = []
+            self.files[self.files[f]['dir']]['children'].append(f)
+            if path in self.files:
+                self.files[path].update(f)
+            else:
                 self.files[path] = f
+                if self.files[path]['is_dir']:
+                    self.files[path]['children'] = []
         
-            for f in list(self.files):
-                split = f.split('/')
-                name = split[len(split)-1]
-                split.remove(name)
-                dirinfo = '/'.join(split)
-            
-                if not dirinfo in self.files:
-                    self.files[dirinfo] = {'children': [], 'name': '/', 'size': 0}
-            
-                self.files[f]['children'] = []
-
-                self.files[dirinfo]['children'].append(name)
-                self.files[f]['name'] = name
-                self.files[f]['size'] = self.files[f]['size']
-
-                print(self.files[f])
-
-                if self.files[f]['is_dir'] and ('is_empty' not in self.files[f]):
-                    self.getfiles(self.files[f]['path'])
-
-        else:
-            self.files[fpath]['is_empty'] = True
-
     def getpath(self, f):
         return f['path']
 
@@ -60,45 +62,62 @@ class ENCFS(Fuse):
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
         self.drop = DropboxInit()
-        self.drop.getfiles()
+        self.drop.getfileinfo()
         self.t = time()
 
     def getattr(self, path):
-        t = time()
         st = fuse.Stat()
-        if path in self.drop.files:
-            f = self.drop.files[path]
+        st.st_mode = S_IFDIR | 0755
+        st.st_nlink = 1
+        st.st_size = 4096
+        st.st_ctime = self.t
+        st.st_mtime = self.t
+        st.st_atime = self.t
+
+        return st
+        '''
+        st = fuse.Stat()
+        if path == '/':
+            st.st_mode = S_IFDIR | 0755
+            st.st_ctime = self.t
             st.st_mtime = self.t
-            st.st_atime = st.st_mtime
-            st.st_ctime = st.st_mtime
-            
-            if ('is_dir' in f and f['is_dir']) or f['children']:
-                st.st_mode = stat.S_IFDIR | 0755
-                st.st_nlink = 3
-                st.st_size = f['size']
-            else:
-                st.st_mode = stat.S_IFREG | 0666
-                st.st_nlink = 1
-                st.st_size = f['size']
+            st.st_atime = self.t
+            st.st_nlink = 3
 
             return st
+
         else:
-            st.st_mode = stat.S_IFREG | 0444
-            st.st_size = 0
-            st.st_nlink = 1
+            if path in self.drop.files:
+                f = self.drop.files[path]
+                st.st_mtime = self.t
+                st.st_atime = st.st_mtime
+                st.st_ctime = st.st_mtime
+                
+                if ('is_dir' in f and f['is_dir']):
+                    st.st_mode = S_IFDIR | 0755
+                    st.st_nlink = 1
+                    st.st_size = f['size']
+                else:
+                    st.st_mode = S_IFREG | 0666
+                    st.st_nlink = 1
+                    st.st_size = f['size']
 
-            return st
-
+                return st
+        '''
     def readdir(self, path, offset):
-
+        '''
+        entires = ['.', '..'] + self.files[path]['children']
+        for e in entries:
+            yield fuse.Direntry(e)
+        '''
         entries = [fuse.Direntry('.'),
                    fuse.Direntry('..') ]
+        
         for e in self.drop.files:
             name = self.drop.files[e]['name'] 
-            de = fuse.Direntry(str(name))
-            entries.append(de)
+            diren = fuse.Direntry(str(name))
+            entries.append(diren)
 
-        print(entries)
         return entries
 
     def open(self, path, flags):
