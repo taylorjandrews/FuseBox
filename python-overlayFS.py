@@ -30,31 +30,26 @@ class DropboxInit():
                 self.files[self.getpath(f)] = f
                 self.getfiles(path[-1])
 
-    def getfileinfo(self):
+    def getfileInfo(self):
         self.getfiles()
-        for f in list(self.files):
+        self.sortkeys = []
+        self.dirs = []
+        for f in self.files.keys():
             name = f.split('/')
             name = name[len(name)-1]
+            dirname = f.rsplit('/',1)[0]
+
             self.files[f]['name'] = name
-            self.files[f]['dir'] = f.rsplit('/',1)[0]
+            self.files[f]['dir'] = dirname
             if self.files[f]['dir'] == '':
                 self.files[f]['dir'] = '/'
-            print (self.files[f]['dir'])
-    
-    def getfileinheritance(self):
-        self.getfileinfo()
-        for f in list(self.files):
-            path = self.getpath(f)
-            if not self.files[f][['dir'] in self.files:
-                self.files[self.files[f]['dir']]['children'] = []
-            self.files[self.files[f]['dir']]['children'].append(f)
-            if path in self.files:
-                self.files[path].update(f)
-            else:
-                self.files[path] = f
-                if self.files[path]['is_dir']:
-                    self.files[path]['children'] = []
-        
+            
+        #    self.sortkeys.append(f)
+        #    self.dirs.append(self.files[f]['dir'])
+        #self.sortkeys.append('/')
+        #self.sortkeys.sort()
+        #self.dirs.sort()
+
     def getpath(self, f):
         return f['path']
 
@@ -62,7 +57,7 @@ class ENCFS(Fuse):
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
         self.drop = DropboxInit()
-        self.drop.getfileinfo()
+        self.drop.getfileInfo()
         self.t = time()
 
     def getattr(self, path):
@@ -105,21 +100,15 @@ class ENCFS(Fuse):
                 return st
         '''
     def readdir(self, path, offset):
-        '''
-        entires = ['.', '..'] + self.files[path]['children']
-        for e in entries:
-            yield fuse.Direntry(e)
-        '''
         entries = [fuse.Direntry('.'),
                    fuse.Direntry('..') ]
         
-        for e in self.drop.files:
-            name = self.drop.files[e]['name'] 
-            diren = fuse.Direntry(str(name))
-            entries.append(diren)
-
+        for f in self.drop.files.keys():
+            if self.drop.files[f]['dir'] == path:
+                entries.append(fuse.Direntry(f))
+        
         return entries
-
+        
     def open(self, path, flags):
         return 0
 
