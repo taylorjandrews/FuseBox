@@ -1,3 +1,17 @@
 Taylor Andrews
 
-Custos backed dropbox client
+Custos backed Dropbox client
+
+Set-up:
+1. go to www.dropbox.com/developers
+2. go to app console
+3. create a new app using options:
+      a) Dropbox API app
+      b) Files and datashores
+      c) either yes or no   
+4. create a file appkey.txt in custos-client-dropbox folder
+      a) in appkey.txt add on one line each App key and App secret (in that order)
+      b) generate an access token and add to final line of appkey.txt 
+
+Usage:
+python python-overlayFS.py mountpoint

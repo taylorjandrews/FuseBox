@@ -61,44 +61,43 @@ class ENCFS(Fuse):
         self.t = time()
 
     def getattr(self, path):
-        st = fuse.Stat()
-        st.st_mode = S_IFDIR | 0755
-        st.st_nlink = 3
-        st.st_size = 4096
-        st.st_ctime = self.t
-        st.st_mtime = self.t
-        st.st_atime = self.t
-
-        return st
-
-        
         # st = fuse.Stat()
-        # if path == '/':
-        #     st.st_mode = S_IFDIR | 0755
-        #     st.st_ctime = self.t
-        #     st.st_mtime = self.t
-        #     st.st_atime = self.t
-        #     st.st_nlink = 3
+        # st.st_mode = S_IFDIR | 0755
+        # st.st_nlink = 3
+        # st.st_size = 4096
+        # st.st_ctime = self.t
+        # st.st_mtime = self.t
+        # st.st_atime = self.t
 
-        #     return st
+        # return st
+        
+        st = fuse.Stat()
+        if path == '/':
+            st.st_mode = S_IFDIR | 0755
+            st.st_ctime = self.t
+            st.st_mtime = self.t
+            st.st_atime = self.t
+            st.st_nlink = 3
 
-        # else:
-        #     if path in self.drop.files:
-        #         f = self.drop.files[path]
-        #         st.st_mtime = self.t
-        #         st.st_atime = st.st_mtime
-        #         st.st_ctime = st.st_mtime
+            return st
+
+        else:
+            if path in self.drop.files:
+                f = self.drop.files[path]
+                st.st_mtime = self.t
+                st.st_atime = st.st_mtime
+                st.st_ctime = st.st_mtime
                 
-        #         if ('is_dir' in f and f['is_dir']):
-        #             st.st_mode = S_IFDIR | 0755
-        #             st.st_nlink = 1
-        #             st.st_size = f['size']
-        #         else:
-        #             st.st_mode = S_IFREG | 0666
-        #             st.st_nlink = 1
-        #             st.st_size = f['size']
+                if ('is_dir' in f and f['is_dir']):
+                    st.st_mode = S_IFDIR | 0755
+                    st.st_nlink = 1
+                    st.st_size = f['size']
+                else:
+                    st.st_mode = S_IFREG | 0666
+                    st.st_nlink = 1
+                    st.st_size = f['size']
 
-        #         return st
+                return st
         
     def readdir(self, path, offset):
         entries = [fuse.Direntry('.'),
