@@ -11,7 +11,7 @@ from time import time
 
 fuse.fuse_python_api = (0, 2)
 
-appinfo = open("python-examples/appkey.txt",'r')
+appinfo = open("appkey.txt",'r')
 APP_KEY = appinfo.readline().strip()
 APP_SECRET = appinfo.readline().strip()
 ACCESS_TOKEN = appinfo.readline().strip()
@@ -63,52 +63,58 @@ class ENCFS(Fuse):
     def getattr(self, path):
         st = fuse.Stat()
         st.st_mode = S_IFDIR | 0755
-        st.st_nlink = 1
+        st.st_nlink = 3
         st.st_size = 4096
         st.st_ctime = self.t
         st.st_mtime = self.t
         st.st_atime = self.t
 
         return st
-        '''
-        st = fuse.Stat()
-        if path == '/':
-            st.st_mode = S_IFDIR | 0755
-            st.st_ctime = self.t
-            st.st_mtime = self.t
-            st.st_atime = self.t
-            st.st_nlink = 3
 
-            return st
+        
+        # st = fuse.Stat()
+        # if path == '/':
+        #     st.st_mode = S_IFDIR | 0755
+        #     st.st_ctime = self.t
+        #     st.st_mtime = self.t
+        #     st.st_atime = self.t
+        #     st.st_nlink = 3
 
-        else:
-            if path in self.drop.files:
-                f = self.drop.files[path]
-                st.st_mtime = self.t
-                st.st_atime = st.st_mtime
-                st.st_ctime = st.st_mtime
+        #     return st
+
+        # else:
+        #     if path in self.drop.files:
+        #         f = self.drop.files[path]
+        #         st.st_mtime = self.t
+        #         st.st_atime = st.st_mtime
+        #         st.st_ctime = st.st_mtime
                 
-                if ('is_dir' in f and f['is_dir']):
-                    st.st_mode = S_IFDIR | 0755
-                    st.st_nlink = 1
-                    st.st_size = f['size']
-                else:
-                    st.st_mode = S_IFREG | 0666
-                    st.st_nlink = 1
-                    st.st_size = f['size']
+        #         if ('is_dir' in f and f['is_dir']):
+        #             st.st_mode = S_IFDIR | 0755
+        #             st.st_nlink = 1
+        #             st.st_size = f['size']
+        #         else:
+        #             st.st_mode = S_IFREG | 0666
+        #             st.st_nlink = 1
+        #             st.st_size = f['size']
 
-                return st
-        '''
+        #         return st
+        
     def readdir(self, path, offset):
         entries = [fuse.Direntry('.'),
                    fuse.Direntry('..') ]
         
         for f in self.drop.files.keys():
+            print(self.drop.files[f]['dir'])
             if self.drop.files[f]['dir'] == path:
-                entries.append(fuse.Direntry(f))
+                #use lstrip for just / to make sure it doesn't break
+                #test to see if the encoding fix was actually a fix
+                #change docstrings to by line comments using alt ;
+                entries.append(fuse.Direntry(f.encode('utf-8')[1:]))
         
+        print([e.name for e in entries])
         return entries
-        
+
     def open(self, path, flags):
         return 0
 
