@@ -32,8 +32,6 @@ class DropboxInit():
 
     def getfileInfo(self):
         self.getfiles()
-        self.sortkeys = []
-        self.dirs = []
         for f in self.files.keys():
             name = f.split('/')
             name = name[len(name)-1]
@@ -43,12 +41,6 @@ class DropboxInit():
             self.files[f]['dir'] = dirname
             if self.files[f]['dir'] == '':
                 self.files[f]['dir'] = '/'
-            
-        #    self.sortkeys.append(f)
-        #    self.dirs.append(self.files[f]['dir'])
-        #self.sortkeys.append('/')
-        #self.sortkeys.sort()
-        #self.dirs.sort()
 
     def getpath(self, f):
         return f['path']
@@ -78,6 +70,7 @@ class ENCFS(Fuse):
             st.st_mtime = self.t
             st.st_atime = self.t
             st.st_nlink = 3
+            st.st_size = 4096
 
             return st
 
@@ -91,12 +84,12 @@ class ENCFS(Fuse):
                 if ('is_dir' in f and f['is_dir']):
                     st.st_mode = S_IFDIR | 0755
                     st.st_nlink = 1
-                    st.st_size = f['size']
+                    st.st_size = 4096
                 else:
                     st.st_mode = S_IFREG | 0666
                     st.st_nlink = 1
-                    st.st_size = f['size']
-
+                    st.st_size = int(''.join(x for x in f['size'] if x.isdigit()))
+                
                 return st
         
     def readdir(self, path, offset):
@@ -104,14 +97,9 @@ class ENCFS(Fuse):
                    fuse.Direntry('..') ]
         
         for f in self.drop.files.keys():
-            print(self.drop.files[f]['dir'])
             if self.drop.files[f]['dir'] == path:
-                #use lstrip for just / to make sure it doesn't break
-                #test to see if the encoding fix was actually a fix
-                #change docstrings to by line comments using alt ;
-                entries.append(fuse.Direntry(f.encode('utf-8')[1:]))
-        
-        print([e.name for e in entries])
+                entries.append(fuse.Direntry(self.drop.files[f]['name'].encode('utf-8')))
+
         return entries
 
     def open(self, path, flags):
