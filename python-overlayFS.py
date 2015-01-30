@@ -106,8 +106,8 @@ class ENCFS(Fuse):
 
         if self.dropfuse.files[path]['is_dir']:
             return -1
-        
-        #self.fd = self.dropfuse.client.get_file(path)
+
+        #data = self.dropfuse.client.metadata(path)
         
         #file descriptor
         fd, temp_path = tempfile.mkstemp()
@@ -118,9 +118,10 @@ class ENCFS(Fuse):
         f = os.fdopen(fd, 'wb')
         for line in data:
             f.write(line)
+        f.close()
         
         if (flags & 3) == os.O_WRONLY:
-            return open(temp_path, 'wb')
+            return open(temp_path, 'w+b')
         elif (flags & 3) == os.O_RDONLY:
             return open(temp_path, 'rb')
 
@@ -134,14 +135,19 @@ class ENCFS(Fuse):
         return len(buf)
 
     def release(self, path, flags, fh):
-        if fh.mode == 'wb':
-            response = self.dropfuse.client.put_file(path, fh)
-            print response
+        if fh.mode == 'w+b':
+            fh.seek(0,0)
+            response = self.dropfuse.client.put_file(path, fh, overwrite=True)
+            #print(response)
+
         #need an os.remove(temp_path) call potentially
         fh.close()
 
     def truncate(self, path, offset):
-        pass
+        print("truncate")
+
+    def flush(self, path, flags):
+        print("flush")
         
 def main():
     encfs = ENCFS()
