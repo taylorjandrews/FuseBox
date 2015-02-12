@@ -102,19 +102,27 @@ class ENCFS(Fuse):
         if self.metadata['is_dir']:
             return -1
         
-        fd, self.temp_path = tempfile.mkstemp(prefix='drop_')
+        db_fd, self.temp_path = tempfile.mkstemp(prefix='drop_')
+        print(db_fd)
+        fu_fd = os.dup(db_fd)
+        print(fu_fd)
 
         data = self.dropfuse.client.get_file(path)
         
-        f = os.fdopen(fd, 'wb')
+        db_fh = os.fdopen(db_fd, 'wb')
+        print(db_fh)
         for line in data:
-            f.write(line)
-        #f.close()
-        
+            db_fh.write(line)
+        db_fh.close()
+          
         if (flags & 3) == os.O_WRONLY:
-            return open(self.temp_path, 'w+b')
+            fu_fh =  os.fdopen(fu_fd, 'w+b')
+            print(fu_fh)
+            return fu_fh
         elif (flags & 3) == os.O_RDONLY:
-            return open(self.temp_path, 'rb')
+            fu_fh = os.fdopen(fu_fd, 'rb')
+            print(fu_fh)
+            return fu_fh
 
     def read(self, path, length, offset, fh):
         fh.seek(offset)
@@ -132,12 +140,10 @@ class ENCFS(Fuse):
             response = self.dropfuse.client.put_file(path, fh, overwrite=True)
 
         #need an os.remove(temp_path) call potentially
+        os.remove(self.temp_path)
         fh.close()
 
     def truncate(self, path, length):
-        #32769 stands for O_WRONLY
-        #fh = self.open(path, 32769)
-        #fh.truncate(length)
         with open(self.temp_path, 'w') as f:
             f.truncate(length)
 
