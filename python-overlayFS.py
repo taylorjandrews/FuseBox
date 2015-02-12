@@ -21,133 +21,128 @@ ACCESS_TOKEN = appinfo.readline().strip()
 class DropboxInit():
     def __init__(self):
         self.client = dropbox.client.DropboxClient(ACCESS_TOKEN)
-        self.files = {}
+
+    def getData(self, path):
+        try:
+            metadata = self.client.metadata(path)
+            return metadata
         
-    def getfiles(self, path = '/'):   
-        folder_metadata = self.client.metadata(path)
-        if 'contents' in folder_metadata:
-            for m in folder_metadata['contents']:
-                path = m['path'].split('/', 1)
-                self.files[self.getpath(m)] = m
-                self.getfiles(path[-1])
+        except dropbox.rest.ErrorResponse as e:
+            # for fuse calls that are not in the users dropbox e.status will be 404
+            return -1
 
-    def getfileInfo(self):
-        self.getfiles()
-        for f in self.files.keys():
-            name = f.split('/')
-            name = name[len(name)-1]
-            dirname = f.rsplit('/',1)[0]
+    def parsePath(self, path):
+        name = path.split('/')
+        name = name[len(name)-1]
+        dirname = path.rsplit('/',1)[0]
+        if not dirname:
+            dirname = '/'
 
-            self.files[f]['name'] = name
-            self.files[f]['dir'] = dirname
-            if self.files[f]['dir'] == '':
-                self.files[f]['dir'] = '/'
+        return {"name" : name, "dirname" : dirname}
 
-            #strip should be modified
-            #try time.time()
-            #t = datetime.strptime(str(self.files[f]['modified']).strip(" +0000"), "%a, %d %b %Y %H:%M:%S")
-            #self.files[f]['time'] = t
-
-    def getpath(self, f):
-        return f['path']
+    def getSize(self, metadata):
+        return int(metadata['bytes'])
+        
+    def getTime(self):
+        pass
+        #strip should be modified
+        #try time.time()
+        #t = datetime.strptime(str(self.files[f]['modified']).strip(" +0000"), "%a, %d %b %Y %H:%M:%S")
+        #self.files[f]['time'] = t
 
 class ENCFS(Fuse):
+
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
         self.dropfuse = DropboxInit()
-        self.dropfuse.getfileInfo()
         self.t = time()
+        self.metadata = {}
+        self.temp_path = ""
 
     def getattr(self, path):
-        st = fuse.Stat()
+        self.metadata = self.dropfuse.getData(path)
         
-        if path == '/':
-            st.st_mode = S_IFDIR | 0755
-            st.st_ctime = self.t
+        if self.metadata is not -1:
+            st = fuse.Stat()
+
             st.st_mtime = self.t
-            st.st_atime = self.t
-            st.st_nlink = 3
-            st.st_size = 4096
+            st.st_atime = st.st_mtime
+            st.st_ctime = st.st_mtime
+                
+            
+            if self.metadata['is_dir']:
+                st.st_mode = S_IFDIR | 0755
+                st.st_nlink = 1
+                st.st_size = 4096
+                return st
+
+            st.st_mode = S_IFREG
+            st.st_size = self.dropfuse.getSize(self.metadata)
+            st.st_nlink = 1
 
             return st
-
-        else:
-            if path in self.dropfuse.files:
-                f = self.dropfuse.files[path]
-                st.st_mtime = self.t
-                st.st_atime = st.st_mtime
-                st.st_ctime = st.st_mtime
-                
-                if ('is_dir' in f and f['is_dir']):
-                    st.st_mode = S_IFDIR | 0755
-                    st.st_nlink = 1
-                    st.st_size = 4096
-                else:
-                    st.st_mode = S_IFREG | 0666
-                    st.st_nlink = 1
-                    st.st_size = int(f['bytes'])
-
-                return st
-        
+                        
     def readdir(self, path, offset):
         #fix error if folder etc. does not exist
         entries = [fuse.Direntry('.'),
-                   fuse.Direntry('..') ]
-        
-        for f in self.dropfuse.files.keys():
-            if self.dropfuse.files[f]['dir'] == path:
-                entries.append(fuse.Direntry(self.dropfuse.files[f]['name'].encode('utf-8')))
+                    fuse.Direntry('..')]
 
+        if self.metadata is not -1:
+            if 'contents' in self.metadata:
+                for e in self.metadata['contents']:
+                    path = self.dropfuse.parsePath(e['path'])
+                    entries.append(fuse.Direntry(path['name'].encode('utf-8')))
+            
         return entries
 
     def open(self, path, flags):
-        if path not in self.dropfuse.files:
+        if self.metadata is -1:
             return -1
 
-        if self.dropfuse.files[path]['is_dir']:
+        if self.metadata['is_dir']:
             return -1
-
-        #data = self.dropfuse.client.metadata(path)
         
-        #file descriptor
-        fd, temp_path = tempfile.mkstemp()
-        #os.close(fd)
+        fd, self.temp_path = tempfile.mkstemp(prefix='drop_')
 
         data = self.dropfuse.client.get_file(path)
         
         f = os.fdopen(fd, 'wb')
         for line in data:
             f.write(line)
-        f.close()
+        #f.close()
         
         if (flags & 3) == os.O_WRONLY:
-            return open(temp_path, 'w+b')
+            return open(self.temp_path, 'w+b')
         elif (flags & 3) == os.O_RDONLY:
-            return open(temp_path, 'rb')
+            return open(self.temp_path, 'rb')
 
     def read(self, path, length, offset, fh):
         fh.seek(offset)
         return fh.read(length)
 
     def write(self, path, buf, offset, fh):
-        fh.seek(offset)
+        fh.seek(offset, 0)
         fh.write(buf)
+
         return len(buf)
 
     def release(self, path, flags, fh):
         if fh.mode == 'w+b':
             fh.seek(0,0)
             response = self.dropfuse.client.put_file(path, fh, overwrite=True)
-            #print(response)
 
         #need an os.remove(temp_path) call potentially
         fh.close()
 
-    def truncate(self, path, offset):
-        print("truncate")
+    def truncate(self, path, length):
+        #32769 stands for O_WRONLY
+        #fh = self.open(path, 32769)
+        #fh.truncate(length)
+        with open(self.temp_path, 'w') as f:
+            f.truncate(length)
 
-    def flush(self, path, flags):
-        print("flush")
+    def flush(self, path, fh):
+        return os.fsync(fh)
         
 def main():
     encfs = ENCFS()
