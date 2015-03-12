@@ -29,6 +29,8 @@ class DropboxInit():
         
         except dropbox.rest.ErrorResponse as e:
             # for fuse calls that are not in the users dropbox e.status will be 404
+            if e.status == 404:
+                return -1
             return -1
 
     def parsePath(self, path):
@@ -61,7 +63,7 @@ class ENCFS(Fuse):
 
     def getattr(self, path):
         self.metadata = self.dropfuse.getData(path)
-        
+
         if self.metadata is not -1:
             st = fuse.Stat()
 
@@ -81,6 +83,8 @@ class ENCFS(Fuse):
             st.st_nlink = 1
 
             return st
+
+        return -2
                         
     def readdir(self, path, offset):
         #fix error if folder etc. does not exist
@@ -96,32 +100,31 @@ class ENCFS(Fuse):
         return entries
 
     def open(self, path, flags):
-        if self.metadata is -1:
+        metadata = self.dropfuse.getData(path)
+        if metadata is -1:
             return -1
 
-        if self.metadata['is_dir']:
+        if metadata['is_dir']:
+            return -1
+
+        if 'is_deleted' in metadata:
             return -1
         
         db_fd, self.temp_path = tempfile.mkstemp(prefix='drop_')
-        print(db_fd)
         fu_fd = os.dup(db_fd)
-        print(fu_fd)
 
         data = self.dropfuse.client.get_file(path)
         
         db_fh = os.fdopen(db_fd, 'wb')
-        print(db_fh)
         for line in data:
             db_fh.write(line)
         db_fh.close()
           
         if (flags & 3) == os.O_WRONLY:
             fu_fh =  os.fdopen(fu_fd, 'w+b')
-            print(fu_fh)
             return fu_fh
         elif (flags & 3) == os.O_RDONLY:
             fu_fh = os.fdopen(fu_fd, 'rb')
-            print(fu_fh)
             return fu_fh
 
     def read(self, path, length, offset, fh):
@@ -135,21 +138,46 @@ class ENCFS(Fuse):
         return len(buf)
 
     def release(self, path, flags, fh):
+        metadata = self.dropfuse.getData(path)
+        fh.seek(0, os.SEEK_END)
         if fh.mode == 'w+b':
             fh.seek(0,0)
             response = self.dropfuse.client.put_file(path, fh, overwrite=True)
-
-        #need an os.remove(temp_path) call potentially
         os.remove(self.temp_path)
         fh.close()
 
+    def create(self, path, mode, flags):
+        #create tempfile
+        #use client.put_file to add it to dropbox
+        #github issue, ls attr doesn't have correct info for currently open files
+        fd, temp_path = tempfile.mkstemp()
+        f = open(temp_path, 'w+b')
+        response = self.dropfuse.client.put_file(path, f, overwrite=True)
+        #f.close()
+        #os.close(fd)
+        #os.remove(temp_path)
+        return f
+
+
+#    def ftruncate(self, path, length, fh):
+        #truncate the tempfile denoted by fh
+#        print("ftruncate")
+
     def truncate(self, path, length):
-        with open(self.temp_path, 'w') as f:
-            f.truncate(length)
+        fd, temp_path = tempfile.mkstemp()
+        f = open(temp_path, 'w+b')
+        response = self.dropfuse.client.put_file(path, f, overwrite=True)
+        f.close()
+        os.close(fd)
+        os.remove(temp_path)
+
+    def utimens(self, path, ts_acc, ts_mod):
+        print("utimens")
 
     def flush(self, path, fh):
-        return os.fsync(fh)
-        
+        fh.seek(0,0)
+        response = self.dropfuse.client.put_file(path, fh, overwrite=True)
+
 def main():
     encfs = ENCFS()
     encfs.parse(errex=1)
