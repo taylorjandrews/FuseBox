@@ -78,7 +78,7 @@ class ENCFS(Fuse):
                 st.st_size = 4096
                 return st
 
-            st.st_mode = S_IFREG
+            st.st_mode = S_IFREG | 0664
             st.st_size = self.dropfuse.getSize(self.metadata)
             st.st_nlink = 1
 
@@ -139,6 +139,7 @@ class ENCFS(Fuse):
 
     def release(self, path, flags, fh):
         metadata = self.dropfuse.getData(path)
+        print("Size: ", metadata['bytes'])
         fh.seek(0, os.SEEK_END)
         if fh.mode == 'w+b':
             fh.seek(0,0)
@@ -146,22 +147,22 @@ class ENCFS(Fuse):
         os.remove(self.temp_path)
         fh.close()
 
+    def access(self, path, mode):
+        if not os.access(path, mode):
+            #raise FuseOSError(errno EACCES)
+            return 0 #should be -1 but I'm not setting permissions
+
     def create(self, path, mode, flags):
-        #create tempfile
-        #use client.put_file to add it to dropbox
         #github issue, ls attr doesn't have correct info for currently open files
-        fd, temp_path = tempfile.mkstemp()
+        fd, temp_path = tempfile.mkstemp(prefix='drop_')
         f = open(temp_path, 'w+b')
         response = self.dropfuse.client.put_file(path, f, overwrite=True)
-        #f.close()
-        #os.close(fd)
-        #os.remove(temp_path)
+        os.remove(temp_path)
         return f
 
-
-#    def ftruncate(self, path, length, fh):
+    #def ftruncate(self, path, length, fh):
         #truncate the tempfile denoted by fh
-#        print("ftruncate")
+        #print("ftruncate")
 
     def truncate(self, path, length):
         fd, temp_path = tempfile.mkstemp()
@@ -170,13 +171,26 @@ class ENCFS(Fuse):
         f.close()
         os.close(fd)
         os.remove(temp_path)
+    
+    def unlink(self, path):
+        print("unlink")
 
     def utimens(self, path, ts_acc, ts_mod):
         print("utimens")
+        print(type(ts_acc))
+        print(str(ts_acc))
 
     def flush(self, path, fh):
-        fh.seek(0,0)
-        response = self.dropfuse.client.put_file(path, fh, overwrite=True)
+        fh.truncate()
+        data = self.dropfuse.client.get_file(path)
+        for line in data:
+            fh.write(line)
+        fh.seek(0)
+
+        # pos = fh.tell()
+        # fh.seek(0, 0)
+        # response = self.dropfuse.client.put_file(path, fh, overwrite=True)
+        # fh.seek(pos)
 
 def main():
     encfs = ENCFS()
