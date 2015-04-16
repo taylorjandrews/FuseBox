@@ -59,7 +59,6 @@ class ENCFS(Fuse):
         self.dropfuse = DropboxInit()
         self.t = time()
         self.metadata = {}
-        self.temp_path = ""
 
     def getattr(self, path):
         self.metadata = self.dropfuse.getData(path)
@@ -109,23 +108,27 @@ class ENCFS(Fuse):
 
         if 'is_deleted' in metadata:
             return -1
-        
-        db_fd, self.temp_path = tempfile.mkstemp(prefix='drop_')
-        fu_fd = os.dup(db_fd)
 
-        data = self.dropfuse.client.get_file(path)
-        
-        db_fh = os.fdopen(db_fd, 'wb')
-        for line in data:
-            db_fh.write(line)
-        db_fh.close()
-          
-        if (flags & 3) == os.O_WRONLY:
-            fu_fh =  os.fdopen(fu_fd, 'w+b')
-            return fu_fh
-        elif (flags & 3) == os.O_RDONLY:
-            fu_fh = os.fdopen(fu_fd, 'rb')
-            return fu_fh
+        # This implementation relies on append, ideally the O_TRUNC flag would be used
+        if flags == 32769: #O_WRONLY
+            fd, temp_path = tempfile.mkstemp()
+            os.remove(temp_path)
+            fh = os.fdopen(fd, 'w+')
+            return fh
+        else:
+            db_fd, temp_path = tempfile.mkstemp(prefix='drop_')
+            fu_fd = os.dup(db_fd)
+            os.remove(temp_path)
+            
+            data = self.dropfuse.client.get_file(path)
+            
+            db_fh = os.fdopen(db_fd, 'w+')
+            for line in data:
+                db_fh.write(line)
+            db_fh.close()
+
+            fh = os.fdopen(fu_fd, 'w+')
+            return fh
 
     def read(self, path, length, offset, fh):
         fh.seek(offset)
@@ -139,12 +142,12 @@ class ENCFS(Fuse):
 
     def release(self, path, flags, fh):
         metadata = self.dropfuse.getData(path)
-        print("Size: ", metadata['bytes'])
-        fh.seek(0, os.SEEK_END)
-        if fh.mode == 'w+b':
+        fh.seek(0)
+
+        if fh.mode == 'w+':
             fh.seek(0,0)
             response = self.dropfuse.client.put_file(path, fh, overwrite=True)
-        os.remove(self.temp_path)
+        
         fh.close()
 
     def access(self, path, mode):
@@ -166,14 +169,15 @@ class ENCFS(Fuse):
 
     def truncate(self, path, length):
         fd, temp_path = tempfile.mkstemp()
-        f = open(temp_path, 'w+b')
+        f = open(temp_path, 'w+')
         response = self.dropfuse.client.put_file(path, f, overwrite=True)
         f.close()
         os.close(fd)
         os.remove(temp_path)
+        return 0
     
-    def unlink(self, path):
-        print("unlink")
+    # def unlink(self, path):
+    #     print("unlink")
 
     def utimens(self, path, ts_acc, ts_mod):
         print("utimens")
@@ -181,16 +185,12 @@ class ENCFS(Fuse):
         print(str(ts_acc))
 
     def flush(self, path, fh):
-        fh.truncate()
-        data = self.dropfuse.client.get_file(path)
-        for line in data:
-            fh.write(line)
-        fh.seek(0)
+        pos = fh.tell()
+        fh.seek(0, 0)
+        response = self.dropfuse.client.put_file(path, fh, overwrite=True)
+        fh.seek(pos)
 
-        # pos = fh.tell()
-        # fh.seek(0, 0)
-        # response = self.dropfuse.client.put_file(path, fh, overwrite=True)
-        # fh.seek(pos)
+        return 0
 
 def main():
     encfs = ENCFS()
