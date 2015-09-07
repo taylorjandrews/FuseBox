@@ -24,7 +24,10 @@ class DropboxInit():
 
     def getData(self, path):
         try:
-            metadata = self.client.metadata(path)
+            metadata = self.client.metadata(path, include_deleted=False)
+            if 'is_deleted' in metadata:
+                if metadata['is_deleted']:
+                    return -1
             return metadata
         
         except dropbox.rest.ErrorResponse as e:
@@ -84,6 +87,21 @@ class ENCFS(Fuse):
             return st
 
         return -2
+
+    def unlink(self, path):
+        self.dropfuse.client.file_delete(path)
+
+    def mkdir(self, path, mode):
+        self.dropfuse.client.file_create_folder(path)
+        
+        return 0 #can implement error handling here
+
+    def rmdir(self, path):
+        entries = self.readdir(path, 0)
+        if(len(entries) > 2):
+            print("Directory contains files cannot remove.")
+        else:
+            self.dropfuse.client.file_delete(path)
                         
     def readdir(self, path, offset):
         #fix error if folder etc. does not exist
@@ -110,7 +128,15 @@ class ENCFS(Fuse):
             return -1
 
         # This implementation relies on append, ideally the O_TRUNC flag would be used
-        if flags == 32769: #O_WRONLY
+        # print("flags:    0b{:32b}".format(flags))
+        # print("O_RDONLY: 0b{:32b}".format(os.O_RDONLY))
+        # print("O_WRONLY: 0b{:32b}".format(os.O_WRONLY))
+        # print("O_RDWR:   0b{:32b}".format(os.O_RDWR))
+        # print("O_APPEND: 0b{:32b}".format(os.O_APPEND))
+        # print("O_CREAT:  0b{:32b}".format(os.O_CREAT))
+        # print("O_EXCL:   0b{:32b}".format(os.O_EXCL))
+        # print("O_TRUNC:  0b{:32b}".format(os.O_TRUNC))
+        if ((flags & (os.O_WRONLY | os.O_APPEND)) == os.O_WRONLY):
             fd, temp_path = tempfile.mkstemp()
             os.remove(temp_path)
             fh = os.fdopen(fd, 'w+')
@@ -175,9 +201,6 @@ class ENCFS(Fuse):
         os.close(fd)
         os.remove(temp_path)
         return 0
-    
-    # def unlink(self, path):
-    #     print("unlink")
 
     def utimens(self, path, ts_acc, ts_mod):
         print("utimens")
