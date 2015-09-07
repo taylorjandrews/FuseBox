@@ -91,6 +91,9 @@ class ENCFS(Fuse):
     def unlink(self, path):
         self.dropfuse.client.file_delete(path)
 
+    def rename(self, oldname, newname):
+        self.dropfuse.client.file_move(oldname, newname)
+
     def mkdir(self, path, mode):
         self.dropfuse.client.file_create_folder(path)
         
