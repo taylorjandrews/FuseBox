@@ -2,8 +2,9 @@
 
 import os, sys
 import dropbox
+import ConfigParser
 import tempfile
-from errno import *
+import errno
 from stat import S_IFDIR, S_IFLNK, S_IFREG
 import fcntl
 import fuse
@@ -13,14 +14,13 @@ from datetime import datetime
 
 fuse.fuse_python_api = (0, 2)
 
-appinfo = open("appkey.txt",'r')
-APP_KEY = appinfo.readline().strip()
-APP_SECRET = appinfo.readline().strip()
-ACCESS_TOKEN = appinfo.readline().strip()
-
 class DropboxInit():
     def __init__(self):
-        self.client = dropbox.client.DropboxClient(ACCESS_TOKEN)
+        config = ConfigParser.SafeConfigParser()
+        config.read('./dropfuse.ini')
+        access_token = config.get('oauth', 'token')
+        
+        self.client = dropbox.client.DropboxClient(access_token)
 
     def getData(self, path):
         try:
@@ -102,7 +102,9 @@ class ENCFS(Fuse):
     def rmdir(self, path):
         entries = self.readdir(path, 0)
         if(len(entries) > 2):
-            print("Directory contains files cannot remove.")
+            #print("Directory contains files cannot remove.")
+            print(errno.ENOTEMPTY)
+            return -errno.ENOTEMPTY
         else:
             self.dropfuse.client.file_delete(path)
                         
