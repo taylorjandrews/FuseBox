@@ -1,8 +1,9 @@
 import ConfigParser
 import dropbox
 
-app_key = '74jo3vcthabvmif'
-app_secret = 'bmp6zczabmhp0bx'
+app_key = 'co882ncielif2jf'
+app_secret = 'jm6f3cc4st17h3s'
+
 
 def main():
     cfile = open("./dropfuse.ini", 'w')

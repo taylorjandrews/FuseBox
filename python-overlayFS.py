@@ -19,12 +19,13 @@ class DropboxInit():
         config = ConfigParser.SafeConfigParser()
         config.read('./dropfuse.ini')
         access_token = config.get('oauth', 'token')
-        
+
         self.client = dropbox.client.DropboxClient(access_token)
 
     def getData(self, path):
         try:
-            metadata = self.client.metadata(path, include_deleted=False)
+            metadata = self.client.metadata(path)
+            #print(metadata)
             if 'is_deleted' in metadata:
                 if metadata['is_deleted']:
                     return -1
