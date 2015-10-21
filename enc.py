@@ -10,7 +10,7 @@ import sys
 def get_key(password, key_length):
     return hashlib.sha256(password).digest()[:key_length]
 
-def enc(in_file, out_file, offset):
+def enc(block, offset, out_file):
     password = 'password'
     key = get_key(password, 32)
 
@@ -18,16 +18,11 @@ def enc(in_file, out_file, offset):
     ctr = Crypto.Util.Counter.new(128, initial_value=long(iv))
 
     cipher = Crypto.Cipher.AES.new(key, Crypto.Cipher.AES.MODE_CTR, counter=ctr)
- 
-    done = False
-    while not done:
-        ch = in_file.read(1)
-        if not ch:
-            done = True
-        else:
-            out_file.write(cipher.encrypt(ch))
 
-def dec(in_file, out_file, offset):
+    out_file.seek(offset)
+    out_file.write(cipher.encrypt(block))
+
+def dec(block, offset, out_file):
     password = 'password'
     key = get_key(password, 32)
 
@@ -35,26 +30,42 @@ def dec(in_file, out_file, offset):
     ctr = Crypto.Util.Counter.new(128, initial_value=long(iv))
 
     cipher = Crypto.Cipher.AES.new(key, Crypto.Cipher.AES.MODE_CTR, counter=ctr)
- 
+
+    out_file.seek(offset)
+    out_file.write(cipher.decrypt(block))
+    
+def enc_helper(in_file, out_file):
     done = False
+    offset = 0
     while not done:
-        ch = in_file.read(1)
-        if not ch:
+        block = in_file.read(1024)
+        if not block:
             done = True
         else:
-            print ch
-            out_file.write(cipher.decrypt(ch))
+            enc(block, offset, out_file)
+        offset +=1024
+
+def dec_helper(in_file, out_file):
+    done = False
+    offset = 0
+    while not done:
+        block = in_file.read(1024)
+        if not block:
+            done = True
+        else:
+            dec(block, offset, out_file)
+        offset +=1024
 
 def main():
-    f = open('testfile.txt', 'rb')
+    f = open('/home/taylor/Downloads/datalab-handout/bits.c', 'rb')
     out = open('testfile2.txt', 'wb')
-    enc(f, out, 1)
+    enc_helper(f, out)
     f.close()
     out.close()
     
     f = open('testfile2.txt', 'rb')
     out = open('testfile3.txt', 'wb')
-    dec(f, out, 1)
+    dec_helper(f, out)
     f.close()
     out.close()
 
