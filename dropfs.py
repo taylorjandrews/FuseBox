@@ -9,8 +9,8 @@ from stat import S_IFDIR, S_IFLNK, S_IFREG
 import fcntl
 import fuse
 from fuse import Fuse
-from time import time
-from datetime import datetime
+import time
+import datetime
 
 fuse.fuse_python_api = (0, 2)
 
@@ -53,15 +53,13 @@ class DropboxInit():
         pass
         #strip should be modified
         #try time.time()
-        #t = datetime.strptime(str(self.files[f]['modified']).strip(" +0000"), "%a, %d %b %Y %H:%M:%S")
-        #self.files[f]['time'] = t
-
+        
 class ENCFS(Fuse):
 
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
         self.dropfuse = DropboxInit()
-        self.t = time()
+        #self.t = time()
         self.metadata = {}
 
     def getattr(self, path):
@@ -69,8 +67,13 @@ class ENCFS(Fuse):
 
         if self.metadata is not -1:
             st = fuse.Stat()
-
-            st.st_mtime = self.t
+            if 'modified' in self.metadata:
+                t = datetime.datetime.strptime(str(self.metadata['modified']).strip(" +0000"), "%a, %d %b %Y %H:%M:%S")
+            else:
+                t = datetime.datetime.now()
+               
+            ut = time.mktime(t.timetuple())
+            st.st_mtime = ut
             st.st_atime = st.st_mtime
             st.st_ctime = st.st_mtime
                 
@@ -164,7 +167,9 @@ class ENCFS(Fuse):
 
     def read(self, path, length, offset, fh):
         fh.seek(offset)
-        return fh.read(length)
+        enc = fh.read(length)
+        dec = decyrpt(enc, offset)
+        return dec
 
     def write(self, path, buf, offset, fh):
         fh.seek(offset, 0)
