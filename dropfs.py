@@ -11,6 +11,7 @@ import fuse
 from fuse import Fuse
 import time
 import datetime
+from encryptor import encrypt, decrypt
 
 fuse.fuse_python_api = (0, 2)
 
@@ -68,7 +69,10 @@ class ENCFS(Fuse):
         if self.metadata is not -1:
             st = fuse.Stat()
             if 'modified' in self.metadata:
-                t = datetime.datetime.strptime(str(self.metadata['modified']).strip(" +0000"), "%a, %d %b %Y %H:%M:%S")
+                try:
+                    t = datetime.datetime.strptime(str(self.metadata['modified']).strip(" +0000"), "%a, %d %b %Y %H:%M:%S")
+                except ValueError:
+                    t = datetime.datetime.now()
             else:
                 t = datetime.datetime.now()
                
@@ -85,8 +89,11 @@ class ENCFS(Fuse):
                 return st
 
             st.st_mode = S_IFREG | 0664
-            st.st_size = self.dropfuse.getSize(self.metadata)
             st.st_nlink = 1
+
+            fsize = self.dropfuse.getSize(self.metadata)
+
+            st.st_size = fsize
 
             return st
 
@@ -126,6 +133,7 @@ class ENCFS(Fuse):
         return entries
 
     def open(self, path, flags):
+        #compare hmac
         metadata = self.dropfuse.getData(path)
         if metadata is -1:
             return -1
@@ -148,7 +156,7 @@ class ENCFS(Fuse):
         if ((flags & (os.O_WRONLY | os.O_APPEND)) == os.O_WRONLY):
             fd, temp_path = tempfile.mkstemp()
             os.remove(temp_path)
-            fh = os.fdopen(fd, 'w+')
+            fh = os.fdopen(fd, 'wb+')
             return fh
         else:
             db_fd, temp_path = tempfile.mkstemp(prefix='drop_')
@@ -157,31 +165,54 @@ class ENCFS(Fuse):
             
             data = self.dropfuse.client.get_file(path)
             
-            db_fh = os.fdopen(db_fd, 'w+')
+            db_fh = os.fdopen(db_fd, 'wb+')
             for line in data:
                 db_fh.write(line)
             db_fh.close()
 
-            fh = os.fdopen(fu_fd, 'w+')
+            fh = os.fdopen(fu_fd, 'wb+')
             return fh
 
     def read(self, path, length, offset, fh):
+        #fh.seek(0, os.SEEK_END)
+        #size = fh.tell()
+        #print "size " + str(size)
+        #print "o + l" + str(offset + length)
         fh.seek(offset)
         enc = fh.read(length)
-        dec = decyrpt(enc, offset)
+        #pad = False
+        #if ((offset + length) >= size):
+        #    print("at end")
+        #    pad = True
+        #print("offset {}".format(offset))
+        #fh.close()
+
+        #dec_fd, temp_path = tempfile.mkstemp(prefix='drop_')
+        #os.remove(temp_path)
+        #dec_fh = os.fdpen(dec_fd, 'w+')
+
+        dec = decrypt(enc, offset, fh)
         return dec
 
-    def write(self, path, buf, offset, fh):
-        fh.seek(offset, 0)
-        fh.write(buf)
+        #return fh.read(length)
 
+    def write(self, path, buf, offset, fh):
+        fh.seek(0, 0)
+        dec = decrypt(fh.read(), 0, fh)
+        #fh.seek(offset, 0)
+        #print("offset {}".format(offset))
+        #fh.write(buf)
+        enc_size = encrypt(dec+buf, 0, fh)
+
+        #return enc_size
         return len(buf)
 
     def release(self, path, flags, fh):
+        #recompute hmac
         metadata = self.dropfuse.getData(path)
         fh.seek(0)
 
-        if fh.mode == 'w+':
+        if fh.mode == 'wb+':
             fh.seek(0,0)
             response = self.dropfuse.client.put_file(path, fh, overwrite=True)
         
@@ -206,7 +237,7 @@ class ENCFS(Fuse):
 
     def truncate(self, path, length):
         fd, temp_path = tempfile.mkstemp()
-        f = open(temp_path, 'w+')
+        f = open(temp_path, 'wb+')
         response = self.dropfuse.client.put_file(path, f, overwrite=True)
         f.close()
         os.close(fd)
