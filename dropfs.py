@@ -12,6 +12,7 @@ from fuse import Fuse
 import time
 import datetime
 from encryptor import encrypt, decrypt
+import json
 
 fuse.fuse_python_api = (0, 2)
 
@@ -60,8 +61,8 @@ class ENCFS(Fuse):
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
         self.dropfuse = DropboxInit()
-        #self.t = time()
         self.metadata = {}
+        self.externdata = ""
 
     def getattr(self, path):
         self.metadata = self.dropfuse.getData(path)
@@ -87,6 +88,18 @@ class ENCFS(Fuse):
                 st.st_nlink = 1
                 st.st_size = 4096
                 return st
+
+            if not self.externdata:
+                #make this into a function call please
+                pathinfo = self.dropfuse.parsePath(path)
+                if pathinfo['dirname'] == '/':
+                    metapath = ".dropboxmetadata_" + pathinfo['name']
+                else:
+                    metapath = pathinfo['dirname'] + "/.dropboxmetadata_" + pathinfo['name']
+                with open(metapath, 'rb') as f:
+                    self.externdata = f.read()
+
+            print(self.externdata)
 
             st.st_mode = S_IFREG | 0664
             st.st_nlink = 1
@@ -208,6 +221,23 @@ class ENCFS(Fuse):
         return len(buf)
 
     def release(self, path, flags, fh):
+        pathinfo = self.dropfuse.parsePath(path)
+        if pathinfo['dirname'] == '/':
+            metapath = ".dropboxmetadata_" + pathinfo['name']
+        else:
+            metapath = pathinfo['dirname'] + "/.dropboxmetadata_" + pathinfo['name']
+
+        fd, temp_path = tempfile.mkstemp()
+        os.remove(temp_path)
+        fhm = os.fdopen(fd, 'wb+')
+        
+        fhm.write(json.dumps(self.externdata))  
+        fhm.seek(0)  
+    
+        self.dropfuse.client.put_file(metapath, fhm, overwrite=True)
+
+        fhm.close()
+
         #recompute hmac
         metadata = self.dropfuse.getData(path)
         fh.seek(0)
@@ -224,6 +254,8 @@ class ENCFS(Fuse):
             return 0 #should be -1 but I'm not setting permissions
 
     def create(self, path, mode, flags):
+        if not self.externdata:
+            self.externdata = {"uuid" : "0", "server" : "servername"}
         #github issue, ls attr doesn't have correct info for currently open files
         fd, temp_path = tempfile.mkstemp(prefix='drop_')
         f = open(temp_path, 'w+b')
