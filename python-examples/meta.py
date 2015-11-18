@@ -10,7 +10,7 @@ def get_decoded_and_remainder(input_data):
     return (obj, end, remaining)
 
 encoded_object = '[{"padding_size": 13, "uuid": 10000, "server": 4}]'
-extra_text = "This text is not JSON."
+extra_text = ""
 
 f.seek(0)
 
