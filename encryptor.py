@@ -15,12 +15,11 @@ def get_salted_key(password, salt, key_length):
 def get_key(password, key_length):
     return hashlib.sha256(password).digest()[:key_length]
 
-def encrypt(buf, offset, fh, key_length=32):
+def encrypt(buf, offset, fh, uuid, server):
+    key_length=32
     key = get_key(password, key_length)
 
     #incorporate nonce
-    #uuid
-    #server
     ctr = Crypto.Util.Counter.new(128, initial_value=long(offset))
 
     cipher = Crypto.Cipher.AES.new(key, Crypto.Cipher.AES.MODE_CTR, counter=ctr)
@@ -33,9 +32,10 @@ def encrypt(buf, offset, fh, key_length=32):
     fh.seek(offset)
     fh.write(cipher.encrypt(buf))
 
-    return len(buf)
+    return padding_size
 
-def decrypt(buf, offset, fh, key_length=32):
+def decrypt(buf, offset, fh, uuid, server):
+    key_length=32
     if buf == "":
         return ""
     key = get_key(password, key_length)
