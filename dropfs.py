@@ -89,15 +89,21 @@ class ENCFS(Fuse):
                 st.st_size = 4096
                 return st
 
-            if not self.externdata:
+            metafile = False
+            #metafile, metapath = self.dropfuse.getMetaFileAndPath(path)
+            pathinfo = self.dropfuse.parsePath(path)
+
+            if pathinfo['name'][:17] == ".dropboxmetadata_":
+                metafile = True
+
+            if not metafile and not self.externdata:
                 #make this into a function call please
-                pathinfo = self.dropfuse.parsePath(path)
                 if pathinfo['dirname'] == '/':
                     metapath = ".dropboxmetadata_" + pathinfo['name']
                 else:
                     metapath = pathinfo['dirname'] + "/.dropboxmetadata_" + pathinfo['name']
-                with open(metapath, 'rb') as f:
-                    self.externdata = f.read()
+                
+                self.externdata = self.dropfuse.client.get_file(metapath).readline()
 
             print(self.externdata)
 
@@ -141,7 +147,8 @@ class ENCFS(Fuse):
             if 'contents' in self.metadata:
                 for e in self.metadata['contents']:
                     path = self.dropfuse.parsePath(e['path'])
-                    entries.append(fuse.Direntry(path['name'].encode('utf-8')))
+                    if path['name'][:17] != ".dropboxmetadata_":
+                        entries.append(fuse.Direntry(path['name'].encode('utf-8')))
             
         return entries
 
@@ -203,15 +210,23 @@ class ENCFS(Fuse):
         #dec_fd, temp_path = tempfile.mkstemp(prefix='drop_')
         #os.remove(temp_path)
         #dec_fh = os.fdpen(dec_fd, 'w+')
+        
+        #uuid, server = self.dropfuse.getServerAndID()
+        uuid = self.externdata['uuid']
+        server = self.externdata['server']
 
-        dec = decrypt(enc, offset, fh)
+        dec = decrypt(enc, offset, fh, uuid, server)
         return dec
 
         #return fh.read(length)
 
     def write(self, path, buf, offset, fh):
         fh.seek(0, 0)
-        dec = decrypt(fh.read(), 0, fh)
+
+        uuid = self.externdata['uuid']
+        server = self.externdata['server']
+
+        dec = decrypt(fh.read(), 0, fh, uuid, server)
         #fh.seek(offset, 0)
         #print("offset {}".format(offset))
         #fh.write(buf)
@@ -255,7 +270,7 @@ class ENCFS(Fuse):
 
     def create(self, path, mode, flags):
         if not self.externdata:
-            self.externdata = {"uuid" : "0", "server" : "servername"}
+            self.externdata = {"uuid" : 0, "server" : "servername"}
         #github issue, ls attr doesn't have correct info for currently open files
         fd, temp_path = tempfile.mkstemp(prefix='drop_')
         f = open(temp_path, 'w+b')
