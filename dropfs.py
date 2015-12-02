@@ -239,68 +239,83 @@ class ENCFS(Fuse):
 
     def release(self, path, flags, fh):
         pathinfo = self.dropfuse.parsePath(path)
+
+        # Get the external metafile data
         if pathinfo['dirname'] == '/':
             metapath = ".dropboxmetadata_" + pathinfo['name']
         else:
             metapath = pathinfo['dirname'] + "/.dropboxmetadata_" + pathinfo['name']
 
+        # Make a temporary file
         fd, temp_path = tempfile.mkstemp()
         os.remove(temp_path)
         fhm = os.fdopen(fd, 'wb+')
 
+        # Write metadata to the temp file
         fhm.write(json.dumps(self.externdata))
         fhm.seek(0)
 
+        # Write the metafile to Dropbox
         self.dropfuse.client.put_file(metapath, fhm, overwrite=True)
 
         fhm.close()
 
         #recompute hmac
+        # Get the internal metadata
         metadata = self.dropfuse.getData(path)
         fh.seek(0)
 
         if fh.mode == 'wb+':
             fh.seek(0,0)
+            # Write the file to Dropbox
             response = self.dropfuse.client.put_file(path, fh, overwrite=True)
 
         fh.close()
 
     def access(self, path, mode):
+        # If we can't access the file
         if not os.access(path, mode):
-            #raise FuseOSError(errno EACCES)
-            return 0 #should be -1 but I'm not setting permissions
+            return 0 # Realistically should be -1
 
     def create(self, path, mode, flags):
+        # Create the external data for the new file
         if not self.externdata:
             self.externdata = {"uuid" : 0, "server" : "servername"}
-        #github issue, ls attr doesn't have correct info for currently open files
+
+        # github issue, ls attr doesn't have correct info for currently open files
         fd, temp_path = tempfile.mkstemp(prefix='drop_')
         f = open(temp_path, 'w+b')
+
+        # Putting the file onto dropbox
         response = self.dropfuse.client.put_file(path, f, overwrite=True)
+
         os.remove(temp_path)
         return f
-
-    #def ftruncate(self, path, length, fh):
-        #truncate the tempfile denoted by fh
-        #print("ftruncate")
 
     def truncate(self, path, length):
         fd, temp_path = tempfile.mkstemp()
         f = open(temp_path, 'wb+')
+
+        # Put a blank file on dropbox
         response = self.dropfuse.client.put_file(path, f, overwrite=True)
+
+        # Close all the temp files
         f.close()
         os.close(fd)
         os.remove(temp_path)
+
         return 0
 
-    def utimens(self, path, ts_acc, ts_mod):
-        print("utimens")
-        print(type(ts_acc))
-        print(str(ts_acc))
+    # def utimens(self, path, ts_acc, ts_mod):
+    #     print("utimens")
+    #     print(type(ts_acc))
+    #     print(str(ts_acc))
 
     def flush(self, path, fh):
         pos = fh.tell()
         fh.seek(0, 0)
+
+        # Write changes to Dropbox
         response = self.dropfuse.client.put_file(path, fh, overwrite=True)
         fh.seek(pos)
 
