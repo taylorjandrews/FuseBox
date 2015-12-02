@@ -17,6 +17,7 @@ import json
 fuse.fuse_python_api = (0, 2)
 
 class DropboxInit():
+    # Read the config to get the oauth
     def __init__(self):
         config = ConfigParser.SafeConfigParser()
         config.read('./dropfuse.ini')
@@ -24,38 +25,43 @@ class DropboxInit():
 
         self.client = dropbox.client.DropboxClient(access_token)
 
+    # Given a file path, get the data from dropbox
     def getData(self, path):
         try:
             metadata = self.client.metadata(path)
-            #print(metadata)
+
+            # If the file is deleted, don't return metadata for it
+            # This is necessary since Dropbox keeps track of deleted files
             if 'is_deleted' in metadata:
                 if metadata['is_deleted']:
                     return -1
+
             return metadata
-        
+
         except dropbox.rest.ErrorResponse as e:
-            # for fuse calls that are not in the users dropbox e.status will be 404
+            # For fuse calls that are not in the users dropbox e.status will be 404
+            # Potential to edit error codes based on rest responses
             if e.status == 404:
                 return -1
             return -1
 
+    # Split a path into it's directory and file name
+    # Returns a dictionary
     def parsePath(self, path):
         name = path.split('/')
         name = name[len(name)-1]
         dirname = path.rsplit('/',1)[0]
+
+        # In the case of a blank dirname, we are at the root
         if not dirname:
             dirname = '/'
 
         return {"name" : name, "dirname" : dirname}
 
+    # Get the file size
     def getSize(self, metadata):
         return int(metadata['bytes'])
-        
-    def getTime(self):
-        pass
-        #strip should be modified
-        #try time.time()
-        
+
 class ENCFS(Fuse):
 
     def __init__(self, *args, **kw):
@@ -76,13 +82,13 @@ class ENCFS(Fuse):
                     t = datetime.datetime.now()
             else:
                 t = datetime.datetime.now()
-               
+
             ut = time.mktime(t.timetuple())
             st.st_mtime = ut
             st.st_atime = st.st_mtime
             st.st_ctime = st.st_mtime
-                
-            
+
+
             if self.metadata['is_dir']:
                 st.st_mode = S_IFDIR | 0755
                 st.st_nlink = 1
@@ -102,7 +108,8 @@ class ENCFS(Fuse):
                     metapath = ".dropboxmetadata_" + pathinfo['name']
                 else:
                     metapath = pathinfo['dirname'] + "/.dropboxmetadata_" + pathinfo['name']
-                
+
+                #Store copy of real file size in the metadata
                 self.externdata = self.dropfuse.client.get_file(metapath).readline()
 
             print(self.externdata)
@@ -126,7 +133,7 @@ class ENCFS(Fuse):
 
     def mkdir(self, path, mode):
         self.dropfuse.client.file_create_folder(path)
-        
+
         return 0 #can implement error handling here
 
     def rmdir(self, path):
@@ -137,7 +144,7 @@ class ENCFS(Fuse):
             return -errno.ENOTEMPTY
         else:
             self.dropfuse.client.file_delete(path)
-                        
+
     def readdir(self, path, offset):
         #fix error if folder etc. does not exist
         entries = [fuse.Direntry('.'),
@@ -149,7 +156,7 @@ class ENCFS(Fuse):
                     path = self.dropfuse.parsePath(e['path'])
                     if path['name'][:17] != ".dropboxmetadata_":
                         entries.append(fuse.Direntry(path['name'].encode('utf-8')))
-            
+
         return entries
 
     def open(self, path, flags):
@@ -182,9 +189,9 @@ class ENCFS(Fuse):
             db_fd, temp_path = tempfile.mkstemp(prefix='drop_')
             fu_fd = os.dup(db_fd)
             os.remove(temp_path)
-            
+
             data = self.dropfuse.client.get_file(path)
-            
+
             db_fh = os.fdopen(db_fd, 'wb+')
             for line in data:
                 db_fh.write(line)
@@ -210,7 +217,7 @@ class ENCFS(Fuse):
         #dec_fd, temp_path = tempfile.mkstemp(prefix='drop_')
         #os.remove(temp_path)
         #dec_fh = os.fdpen(dec_fd, 'w+')
-        
+
         #uuid, server = self.dropfuse.getServerAndID()
         uuid = self.externdata['uuid']
         server = self.externdata['server']
@@ -245,10 +252,10 @@ class ENCFS(Fuse):
         fd, temp_path = tempfile.mkstemp()
         os.remove(temp_path)
         fhm = os.fdopen(fd, 'wb+')
-        
-        fhm.write(json.dumps(self.externdata))  
-        fhm.seek(0)  
-    
+
+        fhm.write(json.dumps(self.externdata))
+        fhm.seek(0)
+
         self.dropfuse.client.put_file(metapath, fhm, overwrite=True)
 
         fhm.close()
@@ -260,7 +267,7 @@ class ENCFS(Fuse):
         if fh.mode == 'wb+':
             fh.seek(0,0)
             response = self.dropfuse.client.put_file(path, fh, overwrite=True)
-        
+
         fh.close()
 
     def access(self, path, mode):
