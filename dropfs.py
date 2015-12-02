@@ -63,18 +63,22 @@ class DropboxInit():
         return int(metadata['bytes'])
 
 class ENCFS(Fuse):
-
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
-        self.dropfuse = DropboxInit()
-        self.metadata = {}
-        self.externdata = ""
+        self.dropfuse = DropboxInit() # Initialize dropbox class
+        self.metadata = {} # Initialize blank metadata
+        self.externdata = "" # External metadata
 
     def getattr(self, path):
+        # Get the metadata from dropbox
         self.metadata = self.dropfuse.getData(path)
 
+        # If the file is found on dropbox
         if self.metadata is not -1:
             st = fuse.Stat()
+
+            # If the modified time is in the metadata, load it in
+            # Otherwise, the modified time will be the current time
             if 'modified' in self.metadata:
                 try:
                     t = datetime.datetime.strptime(str(self.metadata['modified']).strip(" +0000"), "%a, %d %b %Y %H:%M:%S")
@@ -83,77 +87,85 @@ class ENCFS(Fuse):
             else:
                 t = datetime.datetime.now()
 
+            # Add the time to st
             ut = time.mktime(t.timetuple())
             st.st_mtime = ut
             st.st_atime = st.st_mtime
             st.st_ctime = st.st_mtime
 
-
+            # If the file is a directory, set permissions to 0755 and size to 4096
             if self.metadata['is_dir']:
                 st.st_mode = S_IFDIR | 0755
                 st.st_nlink = 1
                 st.st_size = 4096
                 return st
 
-            metafile = False
-            #metafile, metapath = self.dropfuse.getMetaFileAndPath(path)
-            pathinfo = self.dropfuse.parsePath(path)
+            metafile = False # To start, assume no external metafile exists
+            pathinfo = self.dropfuse.parsePath(path) # The the path infor
 
+            # If the path begins with dropboxmetadata_ it is an external metafile
             if pathinfo['name'][:17] == ".dropboxmetadata_":
                 metafile = True
 
+            # If there isn't a metafile, create one
             if not metafile and not self.externdata:
-                #make this into a function call please
                 if pathinfo['dirname'] == '/':
-                    metapath = ".dropboxmetadata_" + pathinfo['name']
+                    metapath = ".dropboxmetadata_" + pathinfo['name'] # No need to append path for root
                 else:
                     metapath = pathinfo['dirname'] + "/.dropboxmetadata_" + pathinfo['name']
 
-                #Store copy of real file size in the metadata
+                # Read the metafile from dropbox according to the tabulated metapath
                 self.externdata = self.dropfuse.client.get_file(metapath).readline()
 
-            print(self.externdata)
-
+            # Non folder files should be opened in mode 0664
             st.st_mode = S_IFREG | 0664
-            st.st_nlink = 1
+            st.st_nlink = 1 # One hard link
 
-            fsize = self.dropfuse.getSize(self.metadata)
-
+            fsize = self.dropfuse.getSize(self.metadata) # Get the file size
             st.st_size = fsize
 
             return st
 
-        return -2
+        return -2 # File not found
 
     def unlink(self, path):
+        # Delete the file on dropbox to unlink
         self.dropfuse.client.file_delete(path)
 
     def rename(self, oldname, newname):
+        # Move the file on dropbox to rename
         self.dropfuse.client.file_move(oldname, newname)
 
     def mkdir(self, path, mode):
+        # Create a folder on dropbox for mkdir
         self.dropfuse.client.file_create_folder(path)
 
-        return 0 #can implement error handling here
+        return 0 # can implement error handling here
 
     def rmdir(self, path):
-        entries = self.readdir(path, 0)
+        entries = self.readdir(path, 0) # Get the number of files in the folder
+
         if(len(entries) > 2):
-            #print("Directory contains files cannot remove.")
+            # Directory contains files, we cannot remove it
             print(errno.ENOTEMPTY)
             return -errno.ENOTEMPTY
         else:
+            # If there aren't any files, we can remove the directory
             self.dropfuse.client.file_delete(path)
 
     def readdir(self, path, offset):
-        #fix error if folder etc. does not exist
+        # Initialize entries in the dir with special files . and ..
         entries = [fuse.Direntry('.'),
                     fuse.Direntry('..')]
 
+        # If the file is in fact in dropbox
         if self.metadata is not -1:
+            # Loop through the contents
             if 'contents' in self.metadata:
                 for e in self.metadata['contents']:
                     path = self.dropfuse.parsePath(e['path'])
+
+                    # If the path is an external metafile, do not print it during ls
                     if path['name'][:17] != ".dropboxmetadata_":
                         entries.append(fuse.Direntry(path['name'].encode('utf-8')))
 
@@ -162,81 +174,64 @@ class ENCFS(Fuse):
     def open(self, path, flags):
         #compare hmac
         metadata = self.dropfuse.getData(path)
+
+        # If the file is not in dropbox, do not open it
         if metadata is -1:
             return -1
 
+        # Can't open directories
         if metadata['is_dir']:
             return -1
 
+        # Don't open deleted files (This should be caught by -1 above)
         if 'is_deleted' in metadata:
             return -1
 
         # This implementation relies on append, ideally the O_TRUNC flag would be used
-        # print("flags:    0b{:32b}".format(flags))
-        # print("O_RDONLY: 0b{:32b}".format(os.O_RDONLY))
-        # print("O_WRONLY: 0b{:32b}".format(os.O_WRONLY))
-        # print("O_RDWR:   0b{:32b}".format(os.O_RDWR))
-        # print("O_APPEND: 0b{:32b}".format(os.O_APPEND))
-        # print("O_CREAT:  0b{:32b}".format(os.O_CREAT))
-        # print("O_EXCL:   0b{:32b}".format(os.O_EXCL))
-        # print("O_TRUNC:  0b{:32b}".format(os.O_TRUNC))
         if ((flags & (os.O_WRONLY | os.O_APPEND)) == os.O_WRONLY):
-            fd, temp_path = tempfile.mkstemp()
-            os.remove(temp_path)
-            fh = os.fdopen(fd, 'wb+')
+            fd, temp_path = tempfile.mkstemp() # Make a tempfile
+            os.remove(temp_path) # Remove the temp path
+
+            fh = os.fdopen(fd, 'wb+') # Open the temp file
             return fh
         else:
             db_fd, temp_path = tempfile.mkstemp(prefix='drop_')
-            fu_fd = os.dup(db_fd)
+            fu_fd = os.dup(db_fd) # Duplicate the file descriptor
             os.remove(temp_path)
 
-            data = self.dropfuse.client.get_file(path)
+            data = self.dropfuse.client.get_file(path) # Get the data
 
             db_fh = os.fdopen(db_fd, 'wb+')
+
+            # Write the data using the dupicate, then close it
             for line in data:
                 db_fh.write(line)
             db_fh.close()
 
-            fh = os.fdopen(fu_fd, 'wb+')
+            fh = os.fdopen(fu_fd, 'wb+') # Open the temp file
             return fh
 
     def read(self, path, length, offset, fh):
-        #fh.seek(0, os.SEEK_END)
-        #size = fh.tell()
-        #print "size " + str(size)
-        #print "o + l" + str(offset + length)
         fh.seek(offset)
-        enc = fh.read(length)
-        #pad = False
-        #if ((offset + length) >= size):
-        #    print("at end")
-        #    pad = True
-        #print("offset {}".format(offset))
-        #fh.close()
+        enc = fh.read(length) # Get the data
 
-        #dec_fd, temp_path = tempfile.mkstemp(prefix='drop_')
-        #os.remove(temp_path)
-        #dec_fh = os.fdpen(dec_fd, 'w+')
-
-        #uuid, server = self.dropfuse.getServerAndID()
+        # Get information from metadata for Custos
         uuid = self.externdata['uuid']
         server = self.externdata['server']
 
+        # Actually decrypt the data
         dec = decrypt(enc, offset, fh, uuid, server)
         return dec
-
-        #return fh.read(length)
 
     def write(self, path, buf, offset, fh):
         fh.seek(0, 0)
 
+        # Get information from metadata for Custos
         uuid = self.externdata['uuid']
         server = self.externdata['server']
 
+        # Decrypt the data
         dec = decrypt(fh.read(), 0, fh, uuid, server)
-        #fh.seek(offset, 0)
-        #print("offset {}".format(offset))
-        #fh.write(buf)
         enc_size = encrypt(dec+buf, 0, fh)
 
         #return enc_size
