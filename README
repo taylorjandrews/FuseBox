@@ -1,12 +1,18 @@
-Taylor Andrews
+Custos FuseBox
+Created by: Taylor Andrews
 
-Custos backed Dropbox client
+Custos backed Dropbox client for safer data storage.
 
 Dependencies:
   dropbox python core sdk
+  FUSE
+
+Installation:
+  sudo apt-get install python-fuse
+  pip install dropbox
 
 Setup:
-  run setup.py
+  python setup.py
 
 Usage:
-python python-overlayFS.py mountpoint
+  python python-overlayFS.py <mountpoint>
