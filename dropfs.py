@@ -13,6 +13,7 @@ import time
 import datetime
 from encryptor import encrypt, decrypt
 import json
+import ast
 
 fuse.fuse_python_api = (0, 2)
 
@@ -107,7 +108,7 @@ class ENCFS(Fuse):
             if pathinfo['name'][:17] == ".dropboxmetadata_":
                 metafile = True
 
-            # If there isn't a metafile, create one
+            # If there isn't external data, load it
             if not metafile and not self.externdata:
                 if pathinfo['dirname'] == '/':
                     metapath = ".dropboxmetadata_" + pathinfo['name'] # No need to append path for root
@@ -115,13 +116,14 @@ class ENCFS(Fuse):
                     metapath = pathinfo['dirname'] + "/.dropboxmetadata_" + pathinfo['name']
 
                 # Read the metafile from dropbox according to the tabulated metapath
-                self.externdata = self.dropfuse.client.get_file(metapath).readline()
+                self.externdata = ast.literal_eval(self.dropfuse.client.get_file(metapath).readline())
 
             # Non folder files should be opened in mode 0664
             st.st_mode = S_IFREG | 0664
             st.st_nlink = 1 # One hard link
 
-            fsize = self.dropfuse.getSize(self.metadata) # Get the file size
+            #fsize = self.dropfuse.getSize(self.metadata) # Get the file size
+            fsize = self.externdata['size']
             st.st_size = fsize
 
             return st
@@ -226,13 +228,15 @@ class ENCFS(Fuse):
     def write(self, path, buf, offset, fh):
         fh.seek(0, 0)
 
+        self.externdata['size'] += len(buf)
+
         # Get information from metadata for Custos
         uuid = self.externdata['uuid']
         server = self.externdata['server']
 
         # Decrypt the data
         dec = decrypt(fh.read(), 0, fh, uuid, server)
-        enc_size = encrypt(dec+buf, 0, fh)
+        enc_size = encrypt(dec+buf, 0, fh, uuid, server)
 
         #return enc_size
         return len(buf)
@@ -280,7 +284,7 @@ class ENCFS(Fuse):
     def create(self, path, mode, flags):
         # Create the external data for the new file
         if not self.externdata:
-            self.externdata = {"uuid" : 0, "server" : "servername"}
+            self.externdata = {"uuid" : 0,  "size" : 0, "server" : "servername"}
 
         # github issue, ls attr doesn't have correct info for currently open files
         fd, temp_path = tempfile.mkstemp(prefix='drop_')
