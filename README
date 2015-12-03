@@ -5,8 +5,8 @@ Created by: Taylor Andrews
 Custos backed Dropbox client for safer data storage.
 
 Dependencies:
-  dropbox python core sdk
-  FUSE
+  * dropbox python core sdk
+  * FUSE
 
 Installation:
   sudo apt-get install python-fuse
