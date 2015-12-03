@@ -9,8 +9,8 @@ Dependencies:
   * FUSE
 
 Installation:
-  sudo apt-get install python-fuse
-  pip install dropbox
+  * sudo apt-get install python-fuse
+  * pip install dropbox
 
 Setup:
   python setup.py
