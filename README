@@ -2,7 +2,7 @@ FuseBox
 
 Created by: Taylor Andrews
 
-Custos backed Dropbox client for safer data storage.
+Dropbox client with encryption for safer data storage.
 
 Dependencies:
   * dropbox python core sdk
