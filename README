@@ -16,7 +16,7 @@ Setup:
   python setup.py
 
 Usage:
-  python python-overlayFS.py <mountpoint>
+  python fusebox.py <mountpoint>
 
 Licensing:
   Copyright 2015 Taylor Andrews
