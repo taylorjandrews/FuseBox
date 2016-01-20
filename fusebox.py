@@ -14,7 +14,7 @@ import datetime
 from encryptor import encrypt, decrypt
 import json
 import ast
-#from pytutatmen import client
+import client
 
 fuse.fuse_python_api = (0, 2)
 
@@ -70,6 +70,17 @@ class ENCFS(Fuse):
         self.dropfuse = DropboxInit() # Initialize dropbox class
         self.metadata = {} # Initialize blank metadata
         self.externdata = "" # External metadata
+
+        url = "https://tutamen.bdr1.volatius.net"
+        cert = "~/.tutamen/tutamen-taylor.crt"
+        key = "~/.tutamen/tutamen-taylor.key"
+        c = client.Client(url_server=url, path_cert=cert, path_key=key)
+        c.open()
+        collection = client.CollectionsClient(c)
+        print(collection.create())
+        #secret = client.SecretsClient(c)
+        #secret.create(0, "SECRET")
+        c.close()
 
     def getattr(self, path):
         # Get the metadata from dropbox
