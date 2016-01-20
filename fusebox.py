@@ -14,6 +14,7 @@ import datetime
 from encryptor import encrypt, decrypt
 import json
 import ast
+#from pytutatmen import client
 
 fuse.fuse_python_api = (0, 2)
 
@@ -218,25 +219,26 @@ class ENCFS(Fuse):
         enc = fh.read(length) # Get the data
 
         # Get information from metadata for Custos
-        uuid = self.externdata['uuid']
-        server = self.externdata['server']
+        cuuid = self.externdata['cuuid']
+        suuid = self.externdata['suuid']
 
         # Actually decrypt the data
-        dec = decrypt(enc, offset, fh, uuid, server)
+        dec = decrypt(enc, offset, fh, cuuid, suuid)
         return dec
 
     def write(self, path, buf, offset, fh):
         fh.seek(0, 0)
 
+        print(self.externdata)
+
         self.externdata['size'] += len(buf)
 
         # Get information from metadata for Custos
-        uuid = self.externdata['uuid']
-        server = self.externdata['server']
-
+        cuuid = self.externdata['cuuid']
+        suuid = self.externdata['suuid']
         # Decrypt the data
-        dec = decrypt(fh.read(), 0, fh, uuid, server)
-        enc_size = encrypt(dec+buf, 0, fh, uuid, server)
+        dec = decrypt(fh.read(), 0, fh, cuuid, suuid)
+        enc_size = encrypt(dec+buf, 0, fh, cuuid, suuid)
 
         #return enc_size
         return len(buf)
@@ -284,7 +286,7 @@ class ENCFS(Fuse):
     def create(self, path, mode, flags):
         # Create the external data for the new file
         if not self.externdata:
-            self.externdata = {"uuid" : 0,  "size" : 0, "server" : "servername"}
+            self.externdata = {"cuuid" : 0,  "suuid" : 0, "size" : 0}
 
         # github issue, ls attr doesn't have correct info for currently open files
         fd, temp_path = tempfile.mkstemp(prefix='drop_')
