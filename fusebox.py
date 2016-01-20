@@ -74,13 +74,13 @@ class ENCFS(Fuse):
         url = "https://tutamen.bdr1.volatius.net"
         cert = "~/.tutamen/tutamen-taylor.crt"
         key = "~/.tutamen/tutamen-taylor.key"
-        c = client.Client(url_server=url, path_cert=cert, path_key=key)
-        c.open()
-        collection = client.CollectionsClient(c)
-        print(collection.create())
-        #secret = client.SecretsClient(c)
-        #secret.create(0, "SECRET")
-        c.close()
+        # c = client.Client(url_server=url, path_cert=cert, path_key=key)
+        # c.open()
+        # collection = client.CollectionsClient(c)
+        # print(collection.create())
+        # secret = client.SecretsClient(c)
+        # secret.create(0, "SECRET")
+        # c.close()
 
     def getattr(self, path):
         # Get the metadata from dropbox
