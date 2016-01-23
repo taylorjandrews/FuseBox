@@ -14,7 +14,8 @@ import datetime
 from encryptor import encrypt, decrypt
 import json
 import ast
-import client
+from pytutamen import utilities
+from keys import create_data
 
 fuse.fuse_python_api = (0, 2)
 
@@ -70,17 +71,6 @@ class ENCFS(Fuse):
         self.dropfuse = DropboxInit() # Initialize dropbox class
         self.metadata = {} # Initialize blank metadata
         self.externdata = "" # External metadata
-
-        url = "https://tutamen.bdr1.volatius.net"
-        cert = "~/.tutamen/tutamen-taylor.crt"
-        key = "~/.tutamen/tutamen-taylor.key"
-        # c = client.Client(url_server=url, path_cert=cert, path_key=key)
-        # c.open()
-        # collection = client.CollectionsClient(c)
-        # print(collection.create())
-        # secret = client.SecretsClient(c)
-        # secret.create(0, "SECRET")
-        # c.close()
 
     def getattr(self, path):
         # Get the metadata from dropbox
@@ -240,8 +230,6 @@ class ENCFS(Fuse):
     def write(self, path, buf, offset, fh):
         fh.seek(0, 0)
 
-        print(self.externdata)
-
         self.externdata['size'] += len(buf)
 
         # Get information from metadata for Custos
@@ -297,7 +285,7 @@ class ENCFS(Fuse):
     def create(self, path, mode, flags):
         # Create the external data for the new file
         if not self.externdata:
-            self.externdata = {"cuuid" : 0,  "suuid" : 0, "size" : 0}
+            self.externdata = create_data()
 
         # github issue, ls attr doesn't have correct info for currently open files
         fd, temp_path = tempfile.mkstemp(prefix='drop_')
