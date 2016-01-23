@@ -2,7 +2,6 @@
 #
 # Encrypt the file as it goes up to Dropbox.
 # Decrypt the file as it comes down from Dropbox.
-# Interact with Custos to grab keys.
 #
 
 import Crypto.Cipher
@@ -12,23 +11,14 @@ import hashlib
 import sys
 import hmac
 import os
+from keys import retrieve_key
 
 # Save the block size for portability
 block_size = Crypto.Cipher.AES.block_size
-password = "password"
-
-# Get a key given a salt
-def get_salted_key(password, salt, key_length):
-    return hashlib.sha256(password + salt).digest()[:key_length]
-
-# Returns the user's key
-def get_key(password, key_length):
-    return hashlib.sha256(password).digest()[:key_length]
 
 # Encrypt text
-def encrypt(buf, offset, fh, uuid, server):
-    key_length=32
-    key = get_key(password, key_length)
+def encrypt(buf, offset, fh, cuuid, suuid):
+    key = retrieve_key(cuuid, suuid)
 
     # TODO incorporate nonce
     ctr = Crypto.Util.Counter.new(128, initial_value=long(offset))
@@ -49,14 +39,12 @@ def encrypt(buf, offset, fh, uuid, server):
     return padding_size
 
 # Decrypt the text
-def decrypt(buf, offset, fh, uuid, server):
-    key_length=32
+def decrypt(buf, offset, fh, cuuid, suuid):
+    key = retrieve_key(cuuid, suuid)
 
     # Return blank in the case of a blank buffer
     if buf == "":
         return ""
-
-    key = get_key(password, key_length)
 
     # TODO incorporate nonce
     ctr = Crypto.Util.Counter.new(128, initial_value=long(offset))
