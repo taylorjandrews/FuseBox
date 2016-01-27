@@ -25,17 +25,17 @@ def create_key():
 # Create external metadata
 def create_data():
     # Fetch the default verifier
-    cfile = open("./dropfuse.ini", 'r')
+    cfile = "./dropfuse.ini"
     config = ConfigParser.SafeConfigParser()
     config.read(cfile)
 
-    verifiers = config.get('Tutamen', 'verifier')
+    ver = config.get('tutamen', 'verifier')
 
     # Temporary measure to create the key
     key = create_key()
 
     # Store the key in a collection and secret
-    suuid, cuuid, verifiers = utilities.store_secret(key, verifiers=verifiers)
+    suuid, cuuid, verifiers = utilities.store_secret(key, verifiers=[ver])
 
     # Return the external metadata for new files
     return {"cuuid" : str(cuuid),  "suuid" : str(suuid), "size" : 0}
