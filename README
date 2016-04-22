@@ -7,15 +7,18 @@ Dropbox client with encryption for safer data storage.
 Dependencies:
   * dropbox python core sdk
   * FUSE
+  * Python Requests v2.7.0
 
 Installation:
   * sudo apt-get install python-fuse
-  * pip install dropbox
+  * pip install dropbox (alternatively download from
+  https://www.dropbox.com/developers-v1/core/sdks/python)
 
-Setup:
+Setup Dropbox Oauth:
   python setup.py
 
 Usage:
+  Share any desired secrets via Tutamen
   python fusebox.py <mountpoint>
 
 Licensing:
